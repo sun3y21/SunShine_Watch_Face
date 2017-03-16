@@ -1,4 +1,5 @@
-package com.example.sunshinewear;/*
+package com.example.android.sunshine;
+/*
  * Copyright (C) 2014 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +20,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -34,13 +36,19 @@ import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
+import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.wearable.DataApi;
+import com.google.android.gms.wearable.DataEvent;
 import com.google.android.gms.wearable.DataEventBuffer;
+import com.google.android.gms.wearable.DataItem;
+import com.google.android.gms.wearable.DataMap;
+import com.google.android.gms.wearable.DataMapItem;
+import com.google.android.gms.wearable.Wearable;
 
 import java.lang.ref.WeakReference;
 import java.text.SimpleDateFormat;
@@ -106,8 +114,20 @@ public class SunShineWatchFace extends CanvasWatchFaceService {
         Paint minTemp;
         Bitmap mBitmap;
 
-        String maxTemprature="90";
-        String minTemprature="30";
+        int mWeatherId;
+
+        static final String WEATHER_DATA_PATH = "/WEATHER_DATA_PATH";
+        static final String WEATHER_ID = "WEATHER_KEY";
+        static final String TEMP_HIGH = "MIN_TEMP";
+        static final String TEMP_LOW = "MAX_TEMP";
+        static final String PREFERENCES = "PREFERENCES";
+        static final String KEY_MAX_TEMP = "KEY_MAX_TEMP";
+        static final String KEY_MIN_TEMP = "KEY_MIN_TEMP";
+        static final String KEY_WEATHER_ID = "KEY_WEATHER_ID";
+
+        GoogleApiClient mGoogleApiClient;
+        String maxTemprature="";
+        String minTemprature="";
 
 
         boolean mAmbient;
@@ -132,6 +152,21 @@ public class SunShineWatchFace extends CanvasWatchFaceService {
         @Override
         public void onCreate(SurfaceHolder holder) {
             super.onCreate(holder);
+
+
+            SharedPreferences preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE);
+            maxTemprature = preferences.getString(KEY_MAX_TEMP,"20");
+            minTemprature = preferences.getString(KEY_MIN_TEMP,"13");
+            mWeatherId = preferences.getInt(KEY_WEATHER_ID,310);
+            loadIconFromWeatherId();
+
+
+            mGoogleApiClient = new GoogleApiClient.Builder(SunShineWatchFace.this)
+                    .addApi(Wearable.API)
+                    .addConnectionCallbacks(this)
+                    .addOnConnectionFailedListener(this)
+                    .build();
+
 
             setWatchFaceStyle(new WatchFaceStyle.Builder(SunShineWatchFace.this)
                     .setCardPeekMode(WatchFaceStyle.PEEK_MODE_VARIABLE)
@@ -161,7 +196,6 @@ public class SunShineWatchFace extends CanvasWatchFaceService {
 
             mImage = new Paint();
             mImage.setColor(Color.BLACK);
-            mBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.ic_clear);
 
             maxTemp=new Paint();
             maxTemp.setColor(Color.WHITE);
@@ -372,22 +406,79 @@ public class SunShineWatchFace extends CanvasWatchFaceService {
 
         @Override
         public void onConnected(@Nullable Bundle bundle) {
-
+            Log.d("Sunnny: ","Connected");
+            Wearable.DataApi.addListener(mGoogleApiClient, this);
         }
 
         @Override
         public void onConnectionSuspended(int i) {
-
+            Log.d("Sunnny:","Connection Suspended");
         }
 
         @Override
         public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
-
+             Log.d("Sunnny:","Connection Failed");
         }
 
         @Override
         public void onDataChanged(DataEventBuffer dataEventBuffer) {
+            Log.d("Sunnny: ", "Yeh Data!");
+            for (DataEvent event : dataEventBuffer) {
+                DataItem item = event.getDataItem();
+                if (WEATHER_DATA_PATH.equals(item.getUri().getPath())) {
+                    DataMap dataMap = DataMapItem.fromDataItem(item).getDataMap();
+                    double high = dataMap.getDouble(TEMP_HIGH);
+                    double low = dataMap.getDouble(TEMP_LOW);
+                    long id = dataMap.getLong(WEATHER_ID);
 
+                    minTemprature=""+(int)low;
+                    maxTemprature=""+(int)high;
+                    mWeatherId = (int) id;
+
+                    loadIconFromWeatherId();
+
+                    SharedPreferences preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE);
+                    SharedPreferences.Editor editor = preferences.edit();
+                    editor.putString(KEY_MAX_TEMP, maxTemprature);
+                    editor.putString(KEY_MIN_TEMP, minTemprature);
+                    editor.putInt(KEY_WEATHER_ID, mWeatherId);
+                    editor.apply();
+
+                }
+            }
+        }
+
+
+        private void loadIconFromWeatherId() {
+
+            int iconId = 0;
+            if (mWeatherId >= 200 && mWeatherId <= 232) {
+                iconId = R.drawable.ic_storm;
+            } else if (mWeatherId >= 300 && mWeatherId <= 321) {
+                iconId = R.drawable.ic_light_rain;
+            } else if (mWeatherId >= 500 && mWeatherId <= 504) {
+                iconId = R.drawable.ic_rain;
+            } else if (mWeatherId == 511) {
+                iconId = R.drawable.ic_snow;
+            } else if (mWeatherId >= 520 && mWeatherId <= 531) {
+                iconId = R.drawable.ic_rain;
+            } else if (mWeatherId >= 600 && mWeatherId <= 622) {
+                iconId = R.drawable.ic_snow;
+            } else if (mWeatherId >= 701 && mWeatherId <= 761) {
+                iconId = R.drawable.ic_fog;
+            } else if (mWeatherId == 761 || mWeatherId == 781) {
+                iconId = R.drawable.ic_storm;
+            } else if (mWeatherId == 800) {
+                iconId = R.drawable.ic_clear;
+            } else if (mWeatherId == 801) {
+                iconId = R.drawable.ic_light_clouds;
+            } else if (mWeatherId >= 802 && mWeatherId <= 804) {
+                iconId = R.drawable.ic_cloudy;
+            }
+
+            if (iconId != 0) {
+                mBitmap = BitmapFactory.decodeResource(getResources(), iconId);
+            }
         }
     }
 }
