@@ -63,6 +63,7 @@ public class SunshineSyncTask {
                     .addConnectionCallbacks(new GoogleApiClient.ConnectionCallbacks() {
                         @Override
                         public void onConnected(@Nullable Bundle bundle) {
+                            Log.d("Sunnny: ","Connected");
                             sendWeatherDataToAndroidWear(mGoogleApiClient);
 
                         }
@@ -154,9 +155,6 @@ public class SunshineSyncTask {
 
             /* If the code reaches this point, we have successfully performed our sync */
 
-
-
-
             }
 
         } catch (Exception e) {
@@ -169,22 +167,25 @@ public class SunshineSyncTask {
         PutDataMapRequest putDataMapRequest;
         PutDataRequest putDataRequest;
         DataMap dataMap;
+        Log.d("Sunnny: ",mGoogleApiClient.isConnected()+" is connected");
         putDataMapRequest = PutDataMapRequest.create("/sunshine-weather");
         dataMap = putDataMapRequest.getDataMap();
         dataMap.putInt("MIN_TEMP", mMinTemp);
         dataMap.putInt("MAX_TEMP", mMaxTemp);
         dataMap.putInt("WEATHER_KEY",mWeatherKey);
         putDataRequest = putDataMapRequest.asPutDataRequest();
-        //Wearable.DataApi.putDataItem(googleApiClient, putDataRequest);
+        putDataMapRequest.setUrgent();
         PendingResult<DataApi.DataItemResult> pendingResult = Wearable.DataApi.putDataItem(googleApiClient, putDataRequest);
 
         pendingResult.setResultCallback(new ResultCallback<DataApi.DataItemResult>() {
             @Override
             public void onResult(final DataApi.DataItemResult result) {
-                if(result.getStatus().isSuccess()) {
+                if(result.getStatus().isSuccess())
+                {
                     Log.d("Sunnny: ", "Data sent successfully to wearable: " + result.getDataItem().getUri());
                 }
-                else{
+                else
+                {
                     Log.d("Sunnny: ","Data sending process failed.");
                 }
             }

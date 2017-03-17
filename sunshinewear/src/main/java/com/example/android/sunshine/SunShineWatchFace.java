@@ -42,10 +42,12 @@ import android.view.WindowInsets;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.wearable.DataApi;
 import com.google.android.gms.wearable.DataEvent;
 import com.google.android.gms.wearable.DataEventBuffer;
 import com.google.android.gms.wearable.DataItem;
+import com.google.android.gms.wearable.DataItemBuffer;
 import com.google.android.gms.wearable.DataMap;
 import com.google.android.gms.wearable.DataMapItem;
 import com.google.android.gms.wearable.Wearable;
@@ -60,7 +62,7 @@ import java.util.concurrent.TimeUnit;
  * Digital watch face with seconds. In ambient mode, the seconds aren't displayed. On devices with
  * low-bit ambient mode, the text is drawn without anti-aliasing in ambient mode.
  */
-public class SunShineWatchFace extends CanvasWatchFaceService {
+public class SunShineWatchFace extends CanvasWatchFaceService{
     private static final Typeface NORMAL_TYPEFACE =
             Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL);
 
@@ -118,8 +120,8 @@ public class SunShineWatchFace extends CanvasWatchFaceService {
 
         static final String WEATHER_DATA_PATH = "/WEATHER_DATA_PATH";
         static final String WEATHER_ID = "WEATHER_KEY";
-        static final String TEMP_HIGH = "MIN_TEMP";
-        static final String TEMP_LOW = "MAX_TEMP";
+        static final String MIN_TEMP = "MIN_TEMP";
+        static final String MAX_TEMP = "MAX_TEMP";
         static final String PREFERENCES = "PREFERENCES";
         static final String KEY_MAX_TEMP = "KEY_MAX_TEMP";
         static final String KEY_MIN_TEMP = "KEY_MIN_TEMP";
@@ -155,9 +157,9 @@ public class SunShineWatchFace extends CanvasWatchFaceService {
 
 
             SharedPreferences preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE);
-            maxTemprature = preferences.getString(KEY_MAX_TEMP,"20");
-            minTemprature = preferences.getString(KEY_MIN_TEMP,"13");
-            mWeatherId = preferences.getInt(KEY_WEATHER_ID,310);
+            maxTemprature = preferences.getString(KEY_MAX_TEMP,"--");
+            minTemprature = preferences.getString(KEY_MIN_TEMP,"--");
+            mWeatherId = preferences.getInt(KEY_WEATHER_ID,800);
             loadIconFromWeatherId();
 
 
@@ -166,6 +168,8 @@ public class SunShineWatchFace extends CanvasWatchFaceService {
                     .addConnectionCallbacks(this)
                     .addOnConnectionFailedListener(this)
                     .build();
+
+            mGoogleApiClient.connect();
 
 
             setWatchFaceStyle(new WatchFaceStyle.Builder(SunShineWatchFace.this)
@@ -229,7 +233,7 @@ public class SunShineWatchFace extends CanvasWatchFaceService {
 
             if (visible) {
                 registerReceiver();
-
+                 mGoogleApiClient.connect();
                 // Update time zone in case it changed while we weren't visible.
                 mCalendar.setTimeZone(TimeZone.getDefault());
                 invalidate();
@@ -408,6 +412,43 @@ public class SunShineWatchFace extends CanvasWatchFaceService {
         public void onConnected(@Nullable Bundle bundle) {
             Log.d("Sunnny: ","Connected");
             Wearable.DataApi.addListener(mGoogleApiClient, this);
+            Wearable.DataApi.getDataItems(mGoogleApiClient).setResultCallback(new ResultCallback<DataItemBuffer>() {
+                @Override
+                public void onResult(@NonNull DataItemBuffer dataItems) {
+                      if(dataItems!=null)
+                      {
+                          if(dataItems.getStatus().isSuccess())
+                          {
+                              for(DataItem data:dataItems)
+                              {
+                                  DataMap dataMap = DataMapItem.fromDataItem(data).getDataMap();
+                                  int high = dataMap.getInt(MAX_TEMP);
+                                  int low = dataMap.getInt(MIN_TEMP);
+                                  int id = dataMap.getInt(WEATHER_ID);
+
+
+                                  minTemprature=""+low;
+                                  maxTemprature=""+high;
+                                  mWeatherId = id;
+
+                                  loadIconFromWeatherId();
+
+                                  SharedPreferences preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE);
+                                  SharedPreferences.Editor editor = preferences.edit();
+                                  editor.putString(KEY_MAX_TEMP, maxTemprature);
+                                  editor.putString(KEY_MIN_TEMP, minTemprature);
+                                  editor.putInt(KEY_WEATHER_ID, mWeatherId);
+                                  editor.apply();
+
+                              }
+                          }
+                      }
+                      dataItems.release();
+                      if (isVisible() && !isInAmbientMode()) {
+                        invalidate();
+                      }
+                }
+            });
         }
 
         @Override
@@ -417,8 +458,11 @@ public class SunShineWatchFace extends CanvasWatchFaceService {
 
         @Override
         public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
-             Log.d("Sunnny:","Connection Failed");
+             Log.d("Sunnny:","Connection Failed : "+connectionResult);
         }
+
+
+
 
         @Override
         public void onDataChanged(DataEventBuffer dataEventBuffer) {
@@ -427,13 +471,14 @@ public class SunShineWatchFace extends CanvasWatchFaceService {
                 DataItem item = event.getDataItem();
                 if (WEATHER_DATA_PATH.equals(item.getUri().getPath())) {
                     DataMap dataMap = DataMapItem.fromDataItem(item).getDataMap();
-                    double high = dataMap.getDouble(TEMP_HIGH);
-                    double low = dataMap.getDouble(TEMP_LOW);
-                    long id = dataMap.getLong(WEATHER_ID);
+                    int high = dataMap.getInt(MAX_TEMP);
+                    int low = dataMap.getInt(MIN_TEMP);
+                    int id = dataMap.getInt(WEATHER_ID);
 
-                    minTemprature=""+(int)low;
-                    maxTemprature=""+(int)high;
-                    mWeatherId = (int) id;
+
+                    minTemprature=""+low;
+                    maxTemprature=""+high;
+                    mWeatherId = id;
 
                     loadIconFromWeatherId();
 
@@ -443,6 +488,9 @@ public class SunShineWatchFace extends CanvasWatchFaceService {
                     editor.putString(KEY_MIN_TEMP, minTemprature);
                     editor.putInt(KEY_WEATHER_ID, mWeatherId);
                     editor.apply();
+                    if (isVisible() && !isInAmbientMode()) {
+                        invalidate();
+                    }
 
                 }
             }
@@ -475,10 +523,19 @@ public class SunShineWatchFace extends CanvasWatchFaceService {
             } else if (mWeatherId >= 802 && mWeatherId <= 804) {
                 iconId = R.drawable.ic_cloudy;
             }
+            else
+            {
+                iconId = R.drawable.ic_clear;
+            }
 
             if (iconId != 0) {
                 mBitmap = BitmapFactory.decodeResource(getResources(), iconId);
             }
+
         }
+
+
+
+
     }
 }
